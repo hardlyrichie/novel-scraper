@@ -1,6 +1,6 @@
 #! python3
 
-import requests, bs4, re, sys
+import requests, bs4, re, sys, pdfkit
 from slugify import slugify
 from urllib.parse import urljoin
 
@@ -38,7 +38,7 @@ def main():
   links = list(map(lambda anchor: f'https:{anchor.get("href")}', table))[::-1]
   res = getPage(links[0])
   soup = bs4.BeautifulSoup(res.text, 'html.parser')
-  print(soup.prettify())
+  pdfkit.from_url(links[0], 'out.pdf')
 
 def getPage(pageURL):
   try:

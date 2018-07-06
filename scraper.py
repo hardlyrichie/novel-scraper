@@ -1,6 +1,6 @@
 #! python3
 
-import requests, bs4, re, sys, pdfkit, PyPDF2
+import requests, bs4, re, sys, pdfkit, PyPDF2, webbrowser
 from os import remove, path
 from slugify import slugify
 from urllib.parse import urljoin
@@ -50,6 +50,7 @@ def main():
 
     soup = bs4.BeautifulSoup(res.text, 'html.parser')
 
+    # Cannot find title and body then assume new translator or website
     if not (title_path and body_path):
       # Get css url for page from final url
       css_url = urljoin(res.url, soup.select('link[rel=stylesheet]')[0].get('href'))
@@ -58,40 +59,61 @@ def main():
       with open('style.css', 'w') as css_file:
         css_file.write(css)
 
-      # If can't find title or body, website might have switched so write all current files to pdf
+      webbrowser.open(res.url, new=2)
 
-      print(f'Open: {res.url}')
+    title = para = para2 = title_parent = body_parent = None
 
-    title = para = para2 = None
-    if not title_path:
-      print('Paste chapter title: ')
-      # title = input()
-      title = 'The end of the first and second time'
+    # Get css selector path to title
+    while not title_parent:
+      if not title_path:
+        print('Paste chapter title ("->" to skip): ')
+        title = input().strip('\n')
+        if not title or title == '->':
+          title_parent = '<span></span>'
+          break
+        # title = 'The end of the first and second time'
 
-      title_parent = soup.find(text=re.compile(title)).parent
-      if title_parent:
-        title_path = get_css_path(title_parent)
-    else:
-      title_parent = soup.select_one(title_path)
-    if not body_path:
-      print('Paste first paragraph: ')
-      # para = input()
-      para = 'The ship that the students of Yasaka High School were on for their field trip sank due to a bomb planted by terrorists.'
-      print('Paste last paragraph: ')
-      # para2 = input()
-      para2 = 'With no time to object to Rodcorte’s undesirable promise, Hiroto’s mind went blank.'
+        try:
+          title_parent = soup.find(text=re.compile(f'^{title}$')).parent
+        except AttributeError:
+          print('<Cannot find title> Try inputing a different title or skipping')
+        if title_parent:
+          title_path = get_css_path(title_parent)
+      else:
+        title_parent = soup.select_one(title_path)
+        if not title_parent:
+          title_path = None
+    # Get css selector path to text
+    while not body_parent:
+      if not body_path:
+        print('Paste first sentence: ')
+        para = input().strip('\n')
+        # para = 'The ship that the students of Yasaka High School were on for their field trip sank due to a bomb planted by terrorists.'
+        print('Paste last sentence: ')
+        para2 = input().strip('\n')
+        # para2 = 'With no time to object to Rodcorte’s undesirable promise, Hiroto’s mind went blank.'
 
-      # Find the closest parent between two nodes para and para2 
-      common_parent = get_common_parent(soup, para, para2)
-      if common_parent:
-        body_path = get_css_path(common_parent)
-    else:
-      common_parent = soup.select_one(body_path)
+        if not para or not para2:
+          print('<Input cannot be empty>')
+          para = para2 = None
+          continue
+
+        # Find the closest parent between two nodes para and para2 
+        body_parent = get_common_parent(soup, para, para2)
+        if body_parent:
+          body_path = get_css_path(body_parent)
+      else:
+        body_parent = soup.select_one(body_path)
+        if not body_parent:
+          body_path = None
+      
+    
+
 
     # print('title path: ' + title_path)
     # print('body path: ' + body_path)
-    assert title_parent == soup.select(title_path)[0]
-    assert common_parent == soup.select(body_path)[0]
+    # assert title_parent == soup.select(title_path)[0]
+    # assert body_parent == soup.select(body_path)[0]
 
     chapter = f'''
     <!DOCTYPE html>
@@ -102,7 +124,7 @@ def main():
     <body>
     <h1>{chapter_num[index]}</h1>
     {str(title_parent)}
-    {str(common_parent)}
+    {str(body_parent)}
     <body>
     </html>
     '''
@@ -111,9 +133,8 @@ def main():
 
     chapters.append(f'{index}.pdf')
 
-
   # Pdf name
-  print(f'File name (default - {novel_name}):')
+  print(f'File name (press enter for default - {novel_name}):')
   temp = input()
   if temp.strip():
     novel_name = temp
@@ -129,6 +150,11 @@ def main():
   remove('style.css')
   for chapter in chapters:
     remove(chapter)
+
+  print('Open pdf? (y/n)')
+  open_pdf = input().lower()
+  if open_pdf == 'y':
+    webbrowser.open(path.abspath(f'{novel_name}.pdf'))
 
 def get_page(page_url):
   try:
@@ -169,11 +195,15 @@ def get_css_path(node):
 
 # https://stackoverflow.com/questions/17786301/beautifulsoup-lowest-common-ancestor
 def get_common_parent(soup, node1, node2):
-  link_1_parents = list(soup.find(text=re.compile(node1)).parents)[::-1]
-  link_2_parents = list(soup.find(text=re.compile(node2)).parents)[::-1]
+  try:
+    link_1_parents = list(soup.find(text=re.compile(node1)).parents)[::-1]
+    link_2_parents = list(soup.find(text=re.compile(node2)).parents)[::-1]
 
-  common_parent = [x for x,y in zip(link_1_parents, link_2_parents) if x is y][-1]
-  return common_parent
+    body_parent = [x for x,y in zip(link_1_parents, link_2_parents) if x is y][-1]
+    return body_parent
+  except AttributeError:
+    print('<Cannot find common parent> Try inputing again with a substring of the sentence')
+    return False
 
 def merge_pdfs(chapters, name):
   pdfs = []

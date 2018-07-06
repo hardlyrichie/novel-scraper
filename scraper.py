@@ -16,122 +16,155 @@ def main():
   page_url = f'https://www.novelupdates.com/series/{slugify(novel_name)}/'
 
   # Try to get the url at novelupdates
-  res = get_page(page_url)
-  while not res:
+  novelupdates = get_page(page_url)
+  while not novelupdates:
     print("Can't get page url. Enter manually (Type exit to quit):")
     page_url = input()
 
     if page_url.lower() == 'exit':
       sys.exit()
 
-    res = get_page(page_url)
+    novelupdates = get_page(page_url)
+  
+  # Number of chapters to write
+  print('Number of chapters ("ALL" for all):')
+  chapters_length = input()
+  if chapters_length.lower() == 'all':
+    # Some large number in which there will never be this many pages
+    chapters_length = 10000
+  else:
+    chapters_length = int(chapters_length) 
+  current_chapter = 0 
 
   # Get last page at novelupdates
-  soup = bs4.BeautifulSoup(res.text, 'html.parser')
+  soup = bs4.BeautifulSoup(novelupdates.text, 'html.parser')
   pagination = soup.select('.digg_pagination')
   if (pagination):
-    lastPage = urljoin(page_url, pagination[0].contents[-2].get('href'))
-    res = get_page(lastPage)
-    soup = bs4.BeautifulSoup(res.text, 'html.parser')
+    last_page = urljoin(page_url, pagination[0].contents[-2].get('href'))
+    novelupdates = get_page(last_page)
+    soup = bs4.BeautifulSoup(novelupdates.text, 'html.parser')
 
-  # Get chapters
-  # Get all anchors that go out of novelupdates from chapter table
-  table = soup.select('#myTable > tbody')[0].find_all(rel='nofollow')
-  # Get all href link and order then from first to last
-  chapter_num = list(map(lambda anchor: anchor.contents[0], table))[::-1]
-  links = list(map(lambda anchor: f'https:{anchor.get("href")}', table))[::-1]
 
-  # Download each chapter and write to individual pdf
   title_path = body_path = None
+  new_title = new_body = False
   chapters = []
-  for index, link in enumerate(links):
-    print('Getting ' + chapter_num[index])
-    res = get_page(link)
+  while current_chapter < chapters_length:
+    # Get chapters
+    # Get all anchors that go out of novelupdates from chapter table
+    table = soup.select('#myTable > tbody')[0].find_all(rel='nofollow')
+    # Get all href link and order then from first to last
+    chapter_num = list(map(lambda anchor: anchor.contents[0], table))[::-1]
+    links = list(map(lambda anchor: f'https:{anchor.get("href")}', table))[::-1]
 
-    soup = bs4.BeautifulSoup(res.text, 'html.parser')
+    # Download each chapter and write to individual pdf
+    for index, link in enumerate(links):
+      print('Getting ' + chapter_num[index])
+      res = get_page(link)
 
-    # Cannot find title and body then assume new translator or website
-    if not (title_path and body_path):
-      # Get css url for page from final url
-      css_url = urljoin(res.url, soup.select('link[rel=stylesheet]')[0].get('href'))
-      css = re.sub('@import[^;]+;', '', requests.get(css_url).text)
+      soup = bs4.BeautifulSoup(res.text, 'html.parser')
 
-      with open('style.css', 'w') as css_file:
-        css_file.write(css)
-
-      webbrowser.open(res.url, new=2)
-
-    title = para = para2 = title_parent = body_parent = None
-
-    # Get css selector path to title
-    while not title_parent:
-      if not title_path:
-        print('Paste chapter title ("->" to skip): ')
-        title = input().strip('\n')
-        if not title or title == '->':
-          title_parent = '<span></span>'
-          break
-        # title = 'The end of the first and second time'
-
-        try:
-          title_parent = soup.find(text=re.compile(f'^{title}$')).parent
-        except AttributeError:
-          print('<Cannot find title> Try inputing a different title or skipping')
-        if title_parent:
-          title_path = get_css_path(title_parent)
-      else:
-        title_parent = soup.select_one(title_path)
-        if not title_parent:
-          title_path = None
-    # Get css selector path to text
-    while not body_parent:
-      if not body_path:
-        print('Paste first sentence: ')
-        para = input().strip('\n')
-        # para = 'The ship that the students of Yasaka High School were on for their field trip sank due to a bomb planted by terrorists.'
-        print('Paste last sentence: ')
-        para2 = input().strip('\n')
-        # para2 = 'With no time to object to Rodcorte’s undesirable promise, Hiroto’s mind went blank.'
-
-        if not para or not para2:
-          print('<Input cannot be empty>')
-          para = para2 = None
-          continue
-
-        # Find the closest parent between two nodes para and para2 
-        body_parent = get_common_parent(soup, para, para2)
-        if body_parent:
-          body_path = get_css_path(body_parent)
-      else:
-        body_parent = soup.select_one(body_path)
-        if not body_parent:
-          body_path = None
+      if current_chapter == 0:
+        # Get css from webpage to write to pdf
+        write_css(urljoin(res.url, soup.select('link[rel=stylesheet]')[0].get('href')))
+        webbrowser.open(res.url, new=2)
       
-    
+      title = para = para2 = title_parent = body_parent = None
+      # Get css selector path to title
+      while not title_parent:
+        if not title_path:
+          print('Paste chapter title ("->" to skip): ')
+          title = input().strip('\n')
+          if not title or title == '->':
+            title_parent = '<span></span>'
+            title_path = 'skip'
+            break
+          # title = 'The end of the first and second time'
+          try:
+            title_parent = soup.find(text=re.compile(f'^{title}$')).parent
+          except AttributeError:
+            print('<Cannot find title> Try inputing a different title or skipping')
+          if title_parent:
+            title_path = get_css_path(title_parent)
+        elif title_path == 'skip':
+          break
+        else:
+          title_parent = soup.select_one(title_path)
+          if not title_parent:
+            title_path = None
+            new_title = True
+            print(f'Open: {res.url}')
+      # Get css selector path to text
+      while not body_parent:
+        if not body_path:
+          print('Paste first sentence: ')
+          para = input().strip('\n')
+          # para = 'The ship that the students of Yasaka High School were on for their field trip sank due to a bomb planted by terrorists.'
+          print('Paste last sentence: ')
+          para2 = input().strip('\n')
+          # para2 = 'With no time to object to Rodcorte’s undesirable promise, Hiroto’s mind went blank.'
 
+          if not para or not para2:
+            print('<Input cannot be empty>')
+            para = para2 = None
+            continue
 
-    # print('title path: ' + title_path)
-    # print('body path: ' + body_path)
-    # assert title_parent == soup.select(title_path)[0]
-    # assert body_parent == soup.select(body_path)[0]
+          # Find the closest parent between two nodes para and para2 
+          body_parent = get_common_parent(soup, para, para2)
+          if body_parent:
+            body_path = get_css_path(body_parent)
+        else:
+          body_parent = soup.select_one(body_path)
+          if not body_parent:
+            body_path = None
+            new_body = True
+            print(f'Open: {res.url}')
 
-    chapter = f'''
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-    </head>
-    <body>
-    <h1>{chapter_num[index]}</h1>
-    {str(title_parent)}
-    {str(body_parent)}
-    <body>
-    </html>
-    '''
+      # new_title and new_body is true then assume new webpage/translator so download new css
+      if new_title and new_body:
+        write_css(urljoin(res.url, soup.select('link[rel=stylesheet]')[0].get('href')))
+      new_title = new_body = False
+        
 
-    pdfkit.from_string(chapter, f'{index}.pdf', css=path.abspath('style.css'))
+      # print('title path: ' + title_path)
+      # print('body path: ' + body_path)
+      # assert title_parent == soup.select(title_path)[0]
+      # assert body_parent == soup.select(body_path)[0]
 
-    chapters.append(f'{index}.pdf')
+      chapter = f'''
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+      </head>
+      <body>
+      <h1>{chapter_num[index]}</h1>
+      {str(title_parent)}
+      {str(body_parent)}
+      <body>
+      </html>
+      '''
+
+      pdfkit.from_string(chapter, f'{current_chapter}.pdf', css=path.abspath('style.css'))
+
+      chapters.append(f'{current_chapter}.pdf')
+
+      current_chapter += 1
+
+      print('Current chapter: ' + str(current_chapter))
+
+      if not current_chapter < chapters_length:
+        break
+
+    if current_chapter < chapters_length:
+      # Get next page in pagination
+      soup = bs4.BeautifulSoup(novelupdates.text, 'html.parser')
+      current_page = soup.select('.digg_pagination > em')[0]
+      if (current_page.previous_sibling):
+        next_page = urljoin(page_url, current_page.previous_sibling.get('href'))
+        novelupdates = get_page(next_page)
+        soup = bs4.BeautifulSoup(novelupdates.text, 'html.parser')
+      else:
+        break
 
   # Pdf name
   print(f'File name (press enter for default - {novel_name}):')
@@ -169,6 +202,12 @@ def get_page(page_url):
     return None
 
   return res
+
+def write_css(css_url):
+  css = re.sub('@import[^;]+;', '', requests.get(css_url).text)
+
+  with open('style.css', 'w') as css_file:
+    css_file.write(css)
 
 # Extract css path of node https://stackoverflow.com/questions/25969474/beautifulsoup-extract-xpath-or-css-path-of-node
 def get_element(node):

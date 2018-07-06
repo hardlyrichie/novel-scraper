@@ -1,0 +1,2 @@
+@py scraper.py %*
+@pause

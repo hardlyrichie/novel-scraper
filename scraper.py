@@ -144,13 +144,12 @@ def main():
       </html>
       '''
 
-      pdfkit.from_string(chapter, f'{current_chapter}.pdf', css=path.abspath('style.css'))
+      # Write pdf for chapter
+      pdfkit.from_string(chapter, f'{chapter_num[index]}.pdf', css=path.abspath('style.css'))
 
-      chapters.append(f'{current_chapter}.pdf')
+      chapters.append(f'{chapter_num[index]}.pdf')
 
       current_chapter += 1
-
-      print('Current chapter: ' + str(current_chapter))
 
       if not current_chapter < chapters_length:
         break

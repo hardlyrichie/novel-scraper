@@ -36,8 +36,35 @@ def main():
     chapters_length = int(chapters_length) 
   current_chapter = 0 
 
-  # Get last page at novelupdates
   soup = bs4.BeautifulSoup(novelupdates.text, 'html.parser')
+
+  # Write cover page
+  cover_img = soup.select('div.seriesimg')[0].img
+  cover_desc = soup.select('div#editdescription')[0]
+  cover = f'''
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <html lang="en">
+        </head>
+        <body>
+        <h1 style='text-align: center;'>{novel_name}</h1>
+        <div style='text-align: center;'>
+          {str(cover_img)}
+        </div>
+        <div style='margin: 0 auto; width: 80%;'>
+          {str(cover_desc)}
+        </div>
+        <body>
+        </html>
+        '''.encode('utf-8')
+  with open('cover.html', 'wb') as cover_html:
+    cover_html.write(cover)
+  
+  cover = 'cover.html'
+
+  # Get last page at novelupdates
   pagination = soup.select('.digg_pagination')
   if (pagination):
     last_page = urljoin(page_url, pagination[0].contents[-2].get('href'))
@@ -107,7 +134,7 @@ def main():
           print('Paste first sentence: ')
           para = input().strip('\n')
           # para = 'The ship that the students of Yasaka High School were on for their field trip sank due to a bomb planted by terrorists.'
-          print('Paste last sentence: ')
+          print('Paste another sentence in a different paragraph: ')
           para2 = input().strip('\n')
           # para2 = 'With no time to object to Rodcorte’s undesirable promise, Hiroto’s mind went blank.'
 
@@ -147,7 +174,9 @@ def main():
       '''
 
       # Write pdf for chapter
-      pdfkit.from_string(chapter, f'{chapter_num[index]}.pdf', css=path.abspath('style.css'))
+      pdfkit.from_string(chapter, f'{chapter_num[index]}.pdf', css=path.abspath('style.css'), cover=cover)
+      
+      cover = None
 
       chapters.append(f'{chapter_num[index]}.pdf')
 
@@ -178,6 +207,7 @@ def main():
 
   # Remove helper files
   remove('style.css')
+  remove('cover.html')
   for chapter in chapters:
     remove(chapter)
 

@@ -59,7 +59,15 @@ def main():
     # Download each chapter and write to individual pdf
     for index, link in enumerate(links):
       print('Getting ' + chapter_num[index])
+
       res = get_page(link)
+
+      # scraping www.webnovel.com novels
+      webnovel = re.compile('rssbook')
+      if webnovel.search(res.url):
+        print('its webnovel')
+        res = get_page(webnovel.sub('book', res.url))
+
 
       soup = bs4.BeautifulSoup(res.text, 'html.parser')
 
@@ -123,12 +131,6 @@ def main():
       if new_title and new_body:
         write_css(urljoin(res.url, soup.select('link[rel=stylesheet]')[0].get('href')))
       new_title = new_body = False
-        
-
-      # print('title path: ' + title_path)
-      # print('body path: ' + body_path)
-      # assert title_parent == soup.select(title_path)[0]
-      # assert body_parent == soup.select(body_path)[0]
 
       chapter = f'''
       <!DOCTYPE html>
@@ -170,10 +172,6 @@ def main():
   temp = input()
   if temp.strip():
     novel_name = temp
-
-  # chapters = []
-  # for chapter in range(14):
-  #   chapters.append(f'{chapter}.pdf')
 
   # Merge chapters into novel pdf
   merge_pdfs(chapters, novel_name)

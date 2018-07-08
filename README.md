@@ -1,2 +1,4 @@
 # novel-scraper
-Scraping webnovels
+Scraping webnovels on novelupdates and writing them to pdfs
+
+
